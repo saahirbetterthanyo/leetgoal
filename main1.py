@@ -17,7 +17,21 @@ from auth import (
 from database1 import Base, engine, get_db
 from sm2 import calculate_sm2
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Flashcard & Problem Tracker API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://leetgoal-nu.vercel.app",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 Base.metadata.create_all(bind=engine)
 
 
