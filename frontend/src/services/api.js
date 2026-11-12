@@ -6,7 +6,11 @@
 const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'https://leetgoal.onrender.com';
 
 export function getApiBaseUrl() {
-  return localStorage.getItem('leetgoal_api_url') || import.meta.env.VITE_API_URL || 'https://leetgoal.onrender.com';
+  const stored = localStorage.getItem('leetgoal_api_url');
+  if (stored && stored.startsWith('http') && !stored.includes('vercel.app') && !stored.includes('localhost') && !stored.includes('leetgoal-api')) {
+    return stored.replace(/\/+$/, '');
+  }
+  return 'https://leetgoal.onrender.com';
 }
 
 export function setApiBaseUrl(url) {
