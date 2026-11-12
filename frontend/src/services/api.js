@@ -3,10 +3,10 @@
  * Handles communication with the FastAPI backend
  */
 
-const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'https://leetgoal-api.onrender.com';
+const DEFAULT_API_BASE = import.meta.env.VITE_API_URL || 'https://leetgoal.onrender.com';
 
 export function getApiBaseUrl() {
-  return localStorage.getItem('leetgoal_api_url') || import.meta.env.VITE_API_URL || 'https://leetgoal-api.onrender.com';
+  return localStorage.getItem('leetgoal_api_url') || import.meta.env.VITE_API_URL || 'https://leetgoal.onrender.com';
 }
 
 export function setApiBaseUrl(url) {
