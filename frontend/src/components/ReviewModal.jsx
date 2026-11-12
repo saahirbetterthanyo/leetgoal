@@ -1,49 +1,43 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  X, 
-  ExternalLink, 
-  Brain, 
-  CheckCircle2, 
-  Sparkles, 
-  AlertCircle, 
-  RotateCcw, 
-  ArrowRight,
-  HelpCircle,
-  Clock
+import {
+  X,
+  ExternalLink,
+  Brain,
+  CheckCircle2,
 } from 'lucide-react';
 
 export function calculateNextIntervalPreview(grade, currentRep = 0, currentInterval = 1, currentEase = 2.5) {
+  const rep = Number(currentRep) || 0;
+  const interval = Number(currentInterval) || 1;
+  const ease = Number(currentEase) || 2.5;
+
   let nextInterval = 1;
   let formula = '';
-  let nextRep = currentRep;
 
   if (grade < 3) {
-    nextRep = 0;
     nextInterval = 1;
     formula = 'Reset to 1d';
   } else {
-    if (currentRep === 0) {
+    if (rep === 0) {
       nextInterval = 1;
       formula = '1d';
-    } else if (currentRep === 1) {
+    } else if (rep === 1) {
       nextInterval = 6;
       formula = '6d';
     } else {
-      nextInterval = Math.round(currentInterval * currentEase);
-      formula = `${currentInterval}d × ${currentEase.toFixed(2)}`;
+      nextInterval = Math.round(interval * ease);
+      formula = `${interval}d × ${ease.toFixed(2)}`;
     }
-    nextRep += 1;
   }
 
-  // Calculate new ease factor
-  let nextEase = currentEase + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
+  let nextEase = ease + (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
   nextEase = Math.max(1.3, nextEase);
 
   return {
     nextInterval,
     formula,
     nextEase: nextEase.toFixed(2),
-    isReset: grade < 3
+    isReset: grade < 3,
   };
 }
 
@@ -53,120 +47,114 @@ const QUALITY_CONFIG = [
     title: '5 — Perfect',
     subtitle: 'Flawless & clean recall',
     color: 'hover:border-emerald-500 hover:bg-emerald-500/10 text-emerald-400 border-slate-800',
-    tag: 'Mastery Boost',
   },
   {
     grade: 4,
     title: '4 — Good',
     subtitle: 'Correct with slight hesitation',
     color: 'hover:border-teal-500 hover:bg-teal-500/10 text-teal-400 border-slate-800',
-    tag: 'Normal Advance',
   },
   {
     grade: 3,
     title: '3 — Hard',
     subtitle: 'Recalled with serious struggle',
     color: 'hover:border-amber-500 hover:bg-amber-500/10 text-amber-400 border-slate-800',
-    tag: 'Short Advance',
   },
   {
     grade: 2,
     title: '2 — Stumbled',
     subtitle: 'Incorrect; caught own mistake',
     color: 'hover:border-orange-500 hover:bg-orange-500/10 text-orange-400 border-slate-800',
-    tag: 'Reset Schedule',
   },
   {
     grade: 1,
     title: '1 — Failed',
     subtitle: 'Wrong; remembered after seeing answer',
     color: 'hover:border-rose-500 hover:bg-rose-500/10 text-rose-400 border-slate-800',
-    tag: 'Reset Schedule',
   },
   {
     grade: 0,
     title: '0 — Blackout',
     subtitle: 'Complete blackout / no idea',
     color: 'hover:border-red-600 hover:bg-red-600/10 text-red-500 border-slate-800',
-    tag: 'Reset Schedule',
   },
 ];
 
-export default function ReviewModal({ 
-  isOpen, 
-  onClose, 
-  queue = [], 
-  onReviewSubmit 
+export default function ReviewModal({
+  isOpen,
+  onClose,
+  queue = [],
+  onReviewSubmit,
 }) {
+  const [sessionQueue, setSessionQueue] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswerHint, setShowAnswerHint] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [lastFeedback, setLastFeedback] = useState(null);
   const [completedCount, setCompletedCount] = useState(0);
+  const [errorText, setErrorText] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && Array.isArray(queue) && queue.length > 0) {
+      setSessionQueue(queue);
       setCurrentIndex(0);
       setShowAnswerHint(false);
       setSubmitting(false);
       setLastFeedback(null);
       setCompletedCount(0);
+      setErrorText('');
     }
-  }, [isOpen, queue]);
+  }, [isOpen]);
 
-  if (!isOpen || queue.length === 0) return null;
+  if (!isOpen || sessionQueue.length === 0) return null;
 
-  const currentItem = queue[currentIndex] || {};
-  // queue items might be full problems with problem.review_data or due card objects
-  const problemName = currentItem?.name || currentItem?.problem?.name || `Problem #${currentItem?.problem_id || currentItem?.id || ''}`;
+  const isFinished = currentIndex >= sessionQueue.length;
+  const currentItem = (!isFinished && sessionQueue[currentIndex]) ? sessionQueue[currentIndex] : {};
+
+  const rawReview = Array.isArray(currentItem?.review_data)
+    ? currentItem.review_data[0]
+    : (currentItem?.review_data || currentItem || {});
+
+  const problemName = currentItem?.name || currentItem?.problem?.name || `Problem #${currentItem?.problem_id || currentItem?.id || 1}`;
   const difficulty = String(currentItem?.difficulty || currentItem?.problem?.difficulty || 'Medium');
-  const topic = currentItem?.topic || currentItem?.problem?.topic || 'Algorithms';
-  const link = currentItem?.link || currentItem?.problem?.link;
-  const reviewData = currentItem?.review_data || currentItem || {};
-  const cardId = reviewData?.id || currentItem?.id;
+  const topic = String(currentItem?.topic || currentItem?.problem?.topic || 'Algorithms');
+  const link = currentItem?.link || currentItem?.problem?.link || '';
+
+  const currentRep = Number(rawReview?.repetition ?? 0);
+  const currentInterval = Number(rawReview?.interval_days ?? 1);
+  const currentEase = Number(rawReview?.easiness ?? 2.5);
+  const cardId = rawReview?.id ?? currentItem?.id;
 
   const handleGradeSelect = async (grade) => {
-    if (!cardId) return;
+    if (!cardId || submitting) return;
     setSubmitting(true);
+    setErrorText('');
     try {
       const updatedCard = await onReviewSubmit(cardId, grade);
-      setCompletedCount(prev => prev + 1);
+      setCompletedCount((prev) => prev + 1);
 
-      // Show brief feedback
-      const nextDate = updatedCard?.next_review_date;
-      const interval = updatedCard?.interval_days;
       setLastFeedback({
         grade,
-        nextDate,
-        interval,
-        easiness: updatedCard?.easiness,
+        nextDate: updatedCard?.next_review_date ? String(updatedCard.next_review_date) : 'Scheduled',
+        interval: Number(updatedCard?.interval_days ?? 1),
       });
 
-      // Advance after a brief delay
       setTimeout(() => {
         setLastFeedback(null);
         setShowAnswerHint(false);
-        if (currentIndex < queue.length - 1) {
-          setCurrentIndex(prev => prev + 1);
-        } else {
-          // Finished entire queue
-          setCurrentIndex(queue.length);
-        }
+        setCurrentIndex((prev) => prev + 1);
         setSubmitting(false);
-      }, 700);
-
+      }, 650);
     } catch (err) {
-      console.error(err);
+      console.error('Review error:', err);
+      setErrorText(err?.message || 'Failed to submit review');
       setSubmitting(false);
     }
   };
 
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
       <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
-        
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
           <div className="flex items-center gap-2">
             <Brain className="w-5 h-5 text-purple-400" />
@@ -175,7 +163,7 @@ export default function ReviewModal({
           <div className="flex items-center gap-3">
             {!isFinished && (
               <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                Card {currentIndex + 1} of {queue.length}
+                Card {currentIndex + 1} of {sessionQueue.length}
               </span>
             )}
             <button
@@ -187,7 +175,6 @@ export default function ReviewModal({
           </div>
         </div>
 
-        {/* Finished State */}
         {isFinished ? (
           <div className="p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
@@ -195,7 +182,7 @@ export default function ReviewModal({
             </div>
             <h3 className="text-lg font-bold text-white mb-2">Review Session Complete!</h3>
             <p className="text-xs text-slate-400 max-w-sm mx-auto mb-6">
-              You reviewed {completedCount} {completedCount === 1 ? 'problem' : 'problems'} today. Your repetition schedules and ease factors have been recalculated via the SM-2 algorithm.
+              You reviewed {completedCount} {completedCount === 1 ? 'problem' : 'problems'} today. Your repetition schedules and ease factors have been updated.
             </p>
             <button
               onClick={onClose}
@@ -206,15 +193,19 @@ export default function ReviewModal({
           </div>
         ) : (
           <div className="p-6">
-            
-            {/* Flashcard Body */}
+            {errorText && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300">
+                {errorText}
+              </div>
+            )}
+
             <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800/80 mb-6 shadow-inner relative">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
                   {topic}
                 </span>
                 <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                  difficulty.toLowerCase() === 'easy' 
+                  difficulty.toLowerCase() === 'easy'
                     ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
                     : difficulty.toLowerCase() === 'medium'
                     ? 'text-amber-400 border-amber-500/30 bg-amber-500/10'
@@ -229,11 +220,11 @@ export default function ReviewModal({
               </h2>
 
               <div className="flex flex-wrap items-center gap-3 pt-2 text-xs text-slate-400 border-t border-slate-900">
-                <span>Repetitions: <strong className="text-slate-200 font-mono">{reviewData?.repetition || 0}</strong></span>
-                <span>Current Interval: <strong className="text-slate-200 font-mono">{reviewData?.interval_days || 1}d</strong></span>
-                <span>Ease Factor: <strong className="text-slate-200 font-mono">{reviewData?.easiness?.toFixed(2) || '2.50'}</strong></span>
+                <span>Repetitions: <strong className="text-slate-200 font-mono">{currentRep}</strong></span>
+                <span>Current Interval: <strong className="text-slate-200 font-mono">{currentInterval}d</strong></span>
+                <span>Ease Factor: <strong className="text-slate-200 font-mono">{currentEase.toFixed(2)}</strong></span>
                 <span className="text-purple-400 font-mono text-[11px] ml-auto">
-                  Rule: {(reviewData?.repetition || 0) === 0 ? '1d' : (reviewData?.repetition || 0) === 1 ? '6d' : `${reviewData?.interval_days || 1}d × ${(reviewData?.easiness || 2.5).toFixed(2)}`}
+                  Rule: {currentRep === 0 ? '1d' : currentRep === 1 ? '6d' : `${currentInterval}d × ${currentEase.toFixed(2)}`}
                 </span>
               </div>
 
@@ -268,9 +259,8 @@ export default function ReviewModal({
                 </div>
               )}
 
-              {/* Instant feedback overlay */}
               {lastFeedback && (
-                <div className="absolute inset-0 bg-slate-950/90 rounded-2xl flex flex-col items-center justify-center animate-fade-in">
+                <div className="absolute inset-0 bg-slate-950/90 rounded-2xl flex flex-col items-center justify-center">
                   <CheckCircle2 className="w-10 h-10 text-emerald-400 mb-2" />
                   <div className="text-sm font-bold text-white">Score {lastFeedback.grade}/5 Recorded!</div>
                   <div className="text-xs text-slate-400 mt-1">
@@ -278,10 +268,8 @@ export default function ReviewModal({
                   </div>
                 </div>
               )}
-
             </div>
 
-            {/* SM-2 Rating Choices */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -294,11 +282,7 @@ export default function ReviewModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
                 {QUALITY_CONFIG.map((opt) => {
-                  const currentRep = reviewData?.repetition || 0;
-                  const currentInterval = reviewData?.interval_days || 1;
-                  const currentEase = reviewData?.easiness || 2.5;
                   const preview = calculateNextIntervalPreview(opt.grade, currentRep, currentInterval, currentEase);
-
                   return (
                     <button
                       key={opt.grade}
@@ -314,8 +298,8 @@ export default function ReviewModal({
                             {opt.title}
                           </span>
                           <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
-                            preview.isReset 
-                              ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' 
+                            preview.isReset
+                              ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
                               : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                           }`}>
                             Next: {preview.nextInterval}d
@@ -326,7 +310,6 @@ export default function ReviewModal({
                         </p>
                       </div>
 
-                      {/* Exact next review interval preview */}
                       <div className="pt-2 border-t border-slate-900/80 flex items-center justify-between text-[10px] font-mono">
                         <span className={preview.isReset ? 'text-rose-400' : 'text-emerald-400 font-medium'}>
                           {preview.formula}
@@ -340,10 +323,8 @@ export default function ReviewModal({
                 })}
               </div>
             </div>
-
           </div>
         )}
-
       </div>
     </div>
   );
