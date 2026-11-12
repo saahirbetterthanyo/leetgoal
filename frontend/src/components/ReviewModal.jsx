@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   ExternalLink, 
@@ -104,16 +104,26 @@ export default function ReviewModal({
   const [lastFeedback, setLastFeedback] = useState(null);
   const [completedCount, setCompletedCount] = useState(0);
 
+  useEffect(() => {
+    if (isOpen) {
+      setCurrentIndex(0);
+      setShowAnswerHint(false);
+      setSubmitting(false);
+      setLastFeedback(null);
+      setCompletedCount(0);
+    }
+  }, [isOpen, queue]);
+
   if (!isOpen || queue.length === 0) return null;
 
-  const currentItem = queue[currentIndex];
+  const currentItem = queue[currentIndex] || {};
   // queue items might be full problems with problem.review_data or due card objects
-  const problemName = currentItem.name || currentItem.problem?.name || `Problem #${currentItem.problem_id || currentItem.id}`;
-  const difficulty = currentItem.difficulty || currentItem.problem?.difficulty || 'Medium';
-  const topic = currentItem.topic || currentItem.problem?.topic || 'Algorithms';
-  const link = currentItem.link || currentItem.problem?.link;
-  const reviewData = currentItem.review_data || currentItem;
-  const cardId = reviewData?.id;
+  const problemName = currentItem?.name || currentItem?.problem?.name || `Problem #${currentItem?.problem_id || currentItem?.id || ''}`;
+  const difficulty = String(currentItem?.difficulty || currentItem?.problem?.difficulty || 'Medium');
+  const topic = currentItem?.topic || currentItem?.problem?.topic || 'Algorithms';
+  const link = currentItem?.link || currentItem?.problem?.link;
+  const reviewData = currentItem?.review_data || currentItem || {};
+  const cardId = reviewData?.id || currentItem?.id;
 
   const handleGradeSelect = async (grade) => {
     if (!cardId) return;
@@ -151,7 +161,6 @@ export default function ReviewModal({
     }
   };
 
-  const isFinished = currentIndex >= queue.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
